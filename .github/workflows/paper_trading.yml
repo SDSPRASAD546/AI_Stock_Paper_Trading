@@ -186,7 +186,7 @@ jobs:
 
         run: |
           set -o pipefail
-          python trading_engine.py 2>&1 | tee data/engine.log
+          python -u trading_engine.py 2>&1 | tee data/engine.log
 
       # =========================================================
       # SAVE MARKET HISTORY
