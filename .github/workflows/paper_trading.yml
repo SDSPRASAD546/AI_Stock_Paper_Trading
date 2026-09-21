@@ -2,8 +2,9 @@ name: NSE AI Paper Trading
 
 on:
   workflow_dispatch:
+
   schedule:
-    # GitHub's schedule is timezone-aware. The Python engine still enforces its own IST session gates.
+    # Start at 09:10 IST on NSE weekdays.
     - cron: '10 9 * * 1-5'
       timezone: 'Asia/Kolkata'
 
@@ -16,20 +17,33 @@ permissions:
 
 jobs:
   paper-session:
-    name: Live NSE paper session
+    name: 2-Hour NSE Paper Session
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+
+    # GitHub-hosted runner maximum is 6 hours.
+    # Our test is intentionally much shorter.
+    timeout-minutes: 150
 
     steps:
-      - name: Checkout
+
+      # =========================================================
+      # CHECKOUT
+      # =========================================================
+      - name: Checkout repository
         uses: actions/checkout@v5
 
+      # =========================================================
+      # PYTHON
+      # =========================================================
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
 
+      # =========================================================
+      # MARKET HISTORY CACHE
+      # =========================================================
       - name: Restore market-history cache
         uses: actions/cache/restore@v4
         with:
@@ -38,53 +52,145 @@ jobs:
           restore-keys: |
             market-history-${{ runner.os }}-${{ github.ref_name }}-
 
+      # =========================================================
+      # DEPENDENCIES
+      # =========================================================
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
-      - name: Run paper engine
+      # =========================================================
+      # PAPER TRADING ENGINE
+      # =========================================================
+      - name: Run 2-hour paper trading session
         env:
+
+          # -----------------------------------------------------
+          # TELEGRAM
+          # -----------------------------------------------------
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: gemini-3.1-flash-lite
 
+          # -----------------------------------------------------
+          # GEMINI
+          # -----------------------------------------------------
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: 'gemini-3.1-flash-lite'
+          AI_MIN_CONFIDENCE: '0.70'
+          AI_CALL_COOLDOWN_SECONDS: '60'
+
+          # -----------------------------------------------------
+          # UPSTOX OAUTH
+          # -----------------------------------------------------
           UPSTOX_CLIENT_ID: ${{ secrets.UPSTOX_CLIENT_ID }}
           UPSTOX_CLIENT_SECRET: ${{ secrets.UPSTOX_CLIENT_SECRET }}
           UPSTOX_REDIRECT_URI: ${{ secrets.UPSTOX_REDIRECT_URI }}
+
+          # Force OAuth.
+          # Do NOT provide a live access token through GitHub.
           UPSTOX_OAUTH_REQUIRED: 'true'
           UPSTOX_ACCESS_TOKEN: ''
+          UPSTOX_ACCESS_TOKEN_FILE: 'data/access_token.txt'
 
+          # -----------------------------------------------------
+          # UPSTOX LIVE MARKET DATA
+          # -----------------------------------------------------
           LIVE_FEED_ENABLED: 'true'
-          UPSTOX_MODE: ltpc
-          AUTO_DOWNLOAD_INSTRUMENTS: 'true'
+          UPSTOX_MODE: 'ltpc'
+
           MAX_SUBSCRIBED_INSTRUMENTS: '5000'
 
-          # GitHub-hosted jobs have a 6-hour execution limit. The test session starts at 09:10
-          # and stops at 15:05; no live order API exists anywhere in the project.
-          ENTRY_START: '09:15'
-          ENTRY_END: '15:00'
-          SQUARE_OFF: '15:00'
-          MARKET_END: '15:05'
-          RUN_STOP_TIME: '15:05'
+          RECONNECT_INTERVAL_SECONDS: '5'
+          RECONNECT_ATTEMPTS: '50'
 
-          HISTORY_DB: data/market_history.db
+          INSTRUMENT_FILE: 'data/NSE.json.gz'
+          INSTRUMENT_URL: 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz'
+          AUTO_DOWNLOAD_INSTRUMENTS: 'true'
+
+          # -----------------------------------------------------
+          # HISTORICAL WARM-UP
+          # -----------------------------------------------------
+          HISTORY_DB: 'data/market_history.db'
           HISTORY_BARS_PER_INSTRUMENT: '120'
           HISTORY_DAYS_BACK: '7'
           HISTORY_REFRESH_STALE_DAYS: '7'
           HISTORY_RATE_LIMIT_PER_MINUTE: '480'
+
           SESSION_BOOTSTRAP_ENABLED: 'true'
           SESSION_BOOTSTRAP_MAX_REQUESTS: '500'
           SESSION_BOOTSTRAP_CONCURRENCY: '10'
           SESSION_BOOTSTRAP_MIN_BARS: '6'
+
+          # -----------------------------------------------------
+          # DYNAMIC SCANNER
+          # -----------------------------------------------------
           SCANNER_TOP_N: '15'
+
+          SCANNER_MIN_SCORE: '45'
+          SCANNER_MIN_VOLUME_RATIO: '1.10'
+          SCANNER_MIN_MOMENTUM_5M: '0.10'
+          SCANNER_MAX_RSI: '72'
+
           SCANNER_MIN_BARS: '20'
           SCANNER_MIN_SESSION_BARS: '5'
+
+          # -----------------------------------------------------
+          # PAPER RISK
+          # -----------------------------------------------------
+          STARTING_CAPITAL: '100000'
+
+          RISK_PER_TRADE_PCT: '0.005'
+          MAX_ALLOCATION_PCT: '0.12'
+
+          STOP_LOSS_PCT: '0.008'
+          TARGET_PCT: '0.016'
+
+          MAX_TRADES: '5'
+          COOLDOWN_MINUTES: '10'
+          ALLOW_SHORT: 'false'
+
+          # -----------------------------------------------------
+          # 2-HOUR TEST WINDOW
+          # -----------------------------------------------------
+          # Bot starts before market open, waits for 09:15,
+          # then allows new paper entries until 11:10.
+          ENTRY_START: '09:15'
+          ENTRY_END: '11:10'
+
+          # Close all remaining paper positions at 11:10.
+          SQUARE_OFF: '11:10'
+
+          # Final engine shutdown.
+          MARKET_END: '11:15'
+          RUN_STOP_TIME: '11:15'
+
+          # Also supply the alternate name in case the current
+          # engine version reads PHASE_STOP_TIME.
+          PHASE_STOP_TIME: '11:15'
+
+          # -----------------------------------------------------
+          # RUNTIME
+          # -----------------------------------------------------
           EVALUATE_EVERY_SECONDS: '60'
-          POSITION_SNAPSHOT_SECONDS: '60'
+
+          # 0 = do NOT send repeated open-position snapshots.
+          # Entry and exit messages remain immediate.
+          POSITION_SNAPSHOT_SECONDS: '0'
+
+          PERSIST_INTERVAL_SECONDS: '5'
+
           TELEGRAM_SCAN_MESSAGES: 'false'
 
-        run: python trading_engine.py 2>&1 | tee data/engine.log
+          OUTPUT_DIR: 'data'
 
+        run: |
+          set -o pipefail
+          python trading_engine.py 2>&1 | tee data/engine.log
+
+      # =========================================================
+      # SAVE MARKET HISTORY
+      # =========================================================
       - name: Save market-history cache
         if: always()
         uses: actions/cache/save@v4
@@ -92,16 +198,21 @@ jobs:
           path: data/market_history.db
           key: market-history-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_id }}
 
+      # =========================================================
+      # UPLOAD PAPER RESULTS
+      # =========================================================
       - name: Upload paper results and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-results-${{ github.run_id }}
+
           path: |
             data/open_positions.json
             data/session_state.json
             data/paper_trades.jsonl
             data/ai_decisions.jsonl
             data/engine.log
+
           retention-days: 30
           if-no-files-found: warn
