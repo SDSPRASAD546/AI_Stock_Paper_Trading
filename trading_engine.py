@@ -709,8 +709,11 @@ class UpstoxLiveFeed:
         return walk(feed)
 
     def _on_open(self):
-        print(f"Upstox market feed connected. Subscribing {len(self.instrument_keys)} instruments in {self.mode} mode...")
-        self.streamer.subscribe(self.instrument_keys, self.mode)
+        print(
+            f"Upstox market feed connected. "
+            f"Monitoring {len(self.instrument_keys)} "
+            f"instruments in {self.mode} mode..."
+        )
 
     def _on_message(self, message):
         feed = self._to_dict(message)
@@ -738,15 +741,29 @@ class UpstoxLiveFeed:
 
     def start_blocking(self):
         import upstox_client
+
         configuration = upstox_client.Configuration()
         configuration.access_token = self.access_token
+
         api_client = upstox_client.ApiClient(configuration)
-        self.streamer = upstox_client.MarketDataStreamerV3(api_client)
+
+        self.streamer = upstox_client.MarketDataStreamerV3(
+            api_client,
+            self.instrument_keys,
+            self.mode,
+        )
+
         self.streamer.on("open", self._on_open)
         self.streamer.on("message", self._on_message)
         self.streamer.on("error", self._on_error)
         self.streamer.on("close", self._on_close)
-        self.streamer.auto_reconnect(True, self.reconnect_interval, self.reconnect_attempts)
+
+        self.streamer.auto_reconnect(
+            True,
+            self.reconnect_interval,
+            self.reconnect_attempts,
+        )
+
         self.streamer.connect()
 
     def stop(self):
