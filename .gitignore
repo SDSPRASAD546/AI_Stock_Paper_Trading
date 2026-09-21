@@ -1,0 +1,15 @@
+.env
+
+data/access_token.txt
+data/market_history.db
+data/*.db
+data/*.json
+data/*.jsonl
+data/*.gz
+
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.vscode/
+*.log
