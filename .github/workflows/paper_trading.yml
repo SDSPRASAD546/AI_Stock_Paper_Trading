@@ -138,7 +138,7 @@ jobs:
           # -----------------------------------------------------
           # PAPER RISK
           # -----------------------------------------------------
-          STARTING_CAPITAL: '100000'
+          STARTING_CAPITAL: '30000'
 
           RISK_PER_TRADE_PCT: '0.005'
           MAX_ALLOCATION_PCT: '0.12'
