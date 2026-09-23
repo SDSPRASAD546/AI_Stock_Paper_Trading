@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
 
   schedule:
-    # Start at 09:10 IST on NSE weekdays.
-    - cron: '10 9 * * 1-5'
+    # Start at 09:15 IST on NSE weekdays.
+    - cron: '15 9 * * 1-5'
       timezone: 'Asia/Kolkata'
 
 concurrency:
@@ -17,15 +17,13 @@ permissions:
 
 jobs:
   paper-session:
-    name: 2-Hour NSE Paper Session
+    name: NSE Paper Session 09:15-14:00 IST
     runs-on: ubuntu-latest
 
-    # GitHub-hosted runner maximum is 6 hours.
-    # Our test is intentionally much shorter.
-    timeout-minutes: 150
+    # Maximum required runtime is approximately 4 hours 50 minutes.
+    timeout-minutes: 300
 
     steps:
-
       # =========================================================
       # CHECKOUT
       # =========================================================
@@ -63,9 +61,8 @@ jobs:
       # =========================================================
       # PAPER TRADING ENGINE
       # =========================================================
-      - name: Run 2-hour paper trading session
+      - name: Run NSE paper trading session
         env:
-
           # -----------------------------------------------------
           # TELEGRAM
           # -----------------------------------------------------
@@ -88,7 +85,7 @@ jobs:
           UPSTOX_REDIRECT_URI: ${{ secrets.UPSTOX_REDIRECT_URI }}
 
           # Force OAuth.
-          # Do NOT provide a live access token through GitHub.
+          # Do not provide a live access token through GitHub.
           UPSTOX_OAUTH_REQUIRED: 'true'
           UPSTOX_ACCESS_TOKEN: ''
           UPSTOX_ACCESS_TOKEN_FILE: 'data/access_token.txt'
@@ -151,31 +148,26 @@ jobs:
           ALLOW_SHORT: 'false'
 
           # -----------------------------------------------------
-          # 2-HOUR TEST WINDOW
+          # TRADING WINDOW
           # -----------------------------------------------------
-          # Bot starts before market open, waits for 09:15,
-          # then allows new paper entries until 11:10.
+          # New paper entries are allowed from 09:15 to 14:00 IST.
           ENTRY_START: '09:15'
-          ENTRY_END: '11:10'
+          ENTRY_END: '14:00'
 
-          # Close all remaining paper positions at 11:10.
-          SQUARE_OFF: '11:10'
+          # Close all remaining paper positions at 14:00 IST.
+          SQUARE_OFF: '14:00'
 
-          # Final engine shutdown.
-          MARKET_END: '11:15'
-          RUN_STOP_TIME: '11:15'
-
-          # Also supply the alternate name in case the current
-          # engine version reads PHASE_STOP_TIME.
-          PHASE_STOP_TIME: '11:15'
+          # Allow five minutes for final processing and persistence.
+          MARKET_END: '14:05'
+          RUN_STOP_TIME: '14:05'
+          PHASE_STOP_TIME: '14:05'
 
           # -----------------------------------------------------
           # RUNTIME
           # -----------------------------------------------------
           EVALUATE_EVERY_SECONDS: '60'
 
-          # 0 = do NOT send repeated open-position snapshots.
-          # Entry and exit messages remain immediate.
+          # Do not send repeated open-position snapshots.
           POSITION_SNAPSHOT_SECONDS: '0'
 
           PERSIST_INTERVAL_SECONDS: '5'
@@ -206,13 +198,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: paper-results-${{ github.run_id }}
-
           path: |
             data/open_positions.json
             data/session_state.json
             data/paper_trades.jsonl
             data/ai_decisions.jsonl
             data/engine.log
-
           retention-days: 30
           if-no-files-found: warn
