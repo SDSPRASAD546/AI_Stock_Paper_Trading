@@ -136,13 +136,14 @@ jobs:
           # PAPER RISK
           # -----------------------------------------------------
           STARTING_CAPITAL: '30000'
-
+          
           RISK_PER_TRADE_PCT: '0.005'
           MAX_ALLOCATION_PCT: '0.12'
-
-          STOP_LOSS_PCT: '0.008'
-          TARGET_PCT: '0.016'
-
+          
+          # Increased paper-trading range
+          STOP_LOSS_PCT: '0.010'   # 1% maximum price loss
+          TARGET_PCT: '0.020'      # 2% profit target
+          
           MAX_TRADES: '5'
           COOLDOWN_MINUTES: '10'
           ALLOW_SHORT: 'false'
